@@ -170,10 +170,18 @@ def main(ach_data_file, img_path, steam_apps, cookie):
 
                 # Update the achievement data
                 save_achievement(
-                    app_id, session_id, statid, bitid,
-                    ach_id, ach['name'], ach['description'],
-                    ach['hidden'], ach['permission'],
-                    ach.get('progressStat', ""), ach.get('progressMin', ""), ach.get('progressMax', ""),
+                    app_id,
+                    session_id,
+                    statid,
+                    bitid,
+                    ach_id,
+                    ach['name'],
+                    ach['description'],
+                    ach['hidden'],
+                    ach['permission'],
+                    ach['progressStat'],
+                    ach['progressMin'],
+                    ach['progressMax'],
                     cookie
                 )
 
@@ -183,20 +191,29 @@ def main(ach_data_file, img_path, steam_apps, cookie):
 
             else:
                 print(f"Creating new achievement {ach_id} for App ID {app_id}")
-                statid, bitid = max(
-                    (ach['stat_id'], ach['bit_id']) for ach in achievements['achievements']
-                )
-                bitid += 1
+                if achievements['achievements']:
+                    statid, bitid = max((ach['stat_id'], ach['bit_id']) for ach in achievements['achievements'])
+                    bitid += 1
+                else:
+                    statid, bitid = 0, -1  # Default values when no achievements exist
 
                 result = new_achievement(app_id, session_id, statid, bitid, cookie)
                 statid = result['achievement']['stat_id']
                 bitid = result['achievement']['bit_id']
 
                 save_achievement(
-                    app_id, session_id, statid, bitid,
-                    ach_id, ach['name'], ach['description'],
-                    ach['hidden'], ach['permission'],
-                    ach.get('progressStat', ""), ach.get('progressMin', ""), ach.get('progressMax', ""),
+                    app_id,
+                    session_id,
+                    statid,
+                    bitid,
+                    ach_id,
+                    ach['name'],
+                    ach['description'],
+                    ach['hidden'],
+                    ach['permission'],
+                    ach['progressStat'],
+                    ach['progressMin'],
+                    ach['progressMax'],
                     cookie
                 )
 
