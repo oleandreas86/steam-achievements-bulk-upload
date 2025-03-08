@@ -1,0 +1,20 @@
+{
+    "data": [
+        {
+            "id":"test-achievement-1",
+            "name":{
+                "en":"Achievement name"
+            },
+            "description":{
+                "en":"Achievement description"
+            },
+            "icon":"icon.png",
+            "icon_locked":"icon_locked.png",
+            "hidden":false,
+            "progressStat":"-1",
+            "progressMin":"0",
+            "progressMax":"0",
+            "permission":"0"
+        }
+    ]
+}
