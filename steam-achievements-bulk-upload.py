@@ -3,12 +3,13 @@ import re
 import json
 import requests
 import sys
+import hashlib
 
 # Usage: python3 steam-achievements-bulk-upload.py ach_data.json images_dir steam_apps.json cookie.txt
 #   - ach_data.json     : see below for format
 #   - images_dir        : path to where the achievement icons specified in ach_data.json are
-#   - steam_apps.json   : Steam application id collecation
-#   - cookie.txt        : taken from the browser (Inspector/Network) after loggin in. 
+#   - steam_apps.json   : Steam application id collection
+#   - cookie.txt        : taken from the browser (Inspector/Network) after logging in.
 #                   Must include params like sessionid, steamLoginSecure, steamMachineAuth.
 #                   eg: "requestedPrimaryPublisher=999; steamLoginSecure=76...; sessionid=eb...; steamMachineAuth76..."
 # ach_data.json format:
@@ -30,6 +31,7 @@ import sys
 
 DELETE_ALL_MODE = False
 DEBUG = False
+SKIP_EXISTING = False
 
 LOCALE_MAP = {
     'ar': "arabic",
@@ -90,12 +92,15 @@ def new_achievement(app_id, session_id, statid, bitid, cookie):
     data = {'sessionid': session_id, 'maxstatid': statid, 'maxbitid': bitid}
     return steam_request(url, cookie, data)
 
+
 def delete_achievement(app_id, session_id, statid, bitid, cookie):
     url = f'https://partner.steamgames.com/apps/deleteachievement/{app_id}/{statid}/{bitid}'
     data = {'sessionid': session_id}
     return steam_request(url, cookie, data)
 
-def save_achievement(app_id, session_id, statid, bitid, apiname, names, descs, hidden, permission, progressStat, progressMin, progressMax, cookie):
+
+def save_achievement(app_id, session_id, statid, bitid, apiname, names, descs, hidden, permission, progressStat,
+                     progressMin, progressMax, cookie):
     url = f'https://partner.steamgames.com/apps/saveachievement/{app_id}'
     displayname = {LOCALE_MAP[loc]: names[loc] for i, loc in enumerate(names.keys())}
     description = {LOCALE_MAP[loc]: descs[loc] for i, loc in enumerate(descs.keys())}
@@ -134,6 +139,25 @@ def upload_image(app_id, session_id, statid, bitid, locked, filename, cookie):
     return steam_request(url, cookie, data, files)
 
 
+def get_image_hash(image_path):
+    """ Compute SHA256 hash of a local image file """
+    hasher = hashlib.sha256()
+    with open(image_path, 'rb') as img_file:
+        hasher.update(img_file.read())
+    return hasher.hexdigest()
+
+
+def get_url_image_hash(image_url):
+    """ Compute SHA256 hash of an image from a URL """
+    hasher = hashlib.sha256()
+    response = requests.get(image_url, stream=True)
+    if response.status_code == 200:
+        for chunk in response.iter_content(8192):
+            hasher.update(chunk)
+        return hasher.hexdigest()
+    return None  # In case of an error
+
+
 def main(ach_data_file, img_path, steam_apps, cookie):
     with open(ach_data_file, 'r') as achievements_file:
         data = json.load(achievements_file)
@@ -157,9 +181,27 @@ def main(ach_data_file, img_path, steam_apps, cookie):
             ach['api_name']: ach for ach in achievements['achievements']
         }
 
+        if DELETE_ALL_MODE:
+            for existing_ach_id in existing_achievements:
+                print(f"Deleting achievement {existing_ach_id} for App ID {app_id}")
+                existing_ach_to_delete = existing_achievements[existing_ach_id]
+                delete_achievement(app_id, session_id, existing_ach_to_delete['stat_id'], existing_ach_to_delete['bit_id'], cookie)
+
+
+            print(f"All achievements deleted")
+            continue
+
+        statid, bitid = 0, -1
+        if achievements['achievements']:
+            statid, bitid = max((ach['stat_id'], ach['bit_id']) for ach in achievements['achievements'])
+            bitid += 1
+
         for ach in data['data']:
             ach_id = ach['id']
             if ach_id in existing_achievements:
+                if SKIP_EXISTING is True:
+                    continue
+
                 # Can be optimized by checking if it has changed before updating. The tricky part for this is checking if the images have changed.
                 print(f"Updating achievement {ach_id} for App ID {app_id}")
                 existing_ach = existing_achievements[ach_id]
@@ -185,17 +227,12 @@ def main(ach_data_file, img_path, steam_apps, cookie):
                     cookie
                 )
 
-                # Upload images only if they have changed (optional)
                 upload_image(app_id, session_id, statid, bitid, False, os.path.join(img_path, ach['icon']), cookie)
-                upload_image(app_id, session_id, statid, bitid, True, os.path.join(img_path, ach['icon_locked']), cookie)
+                upload_image(app_id, session_id, statid, bitid, True, os.path.join(img_path, ach['icon_locked']),
+                             cookie)
 
             else:
                 print(f"Creating new achievement {ach_id} for App ID {app_id}")
-                if achievements['achievements']:
-                    statid, bitid = max((ach['stat_id'], ach['bit_id']) for ach in achievements['achievements'])
-                    bitid += 1
-                else:
-                    statid, bitid = 0, -1  # Default values when no achievements exist
 
                 result = new_achievement(app_id, session_id, statid, bitid, cookie)
                 statid = result['achievement']['stat_id']
@@ -218,7 +255,8 @@ def main(ach_data_file, img_path, steam_apps, cookie):
                 )
 
                 upload_image(app_id, session_id, statid, bitid, False, os.path.join(img_path, ach['icon']), cookie)
-                upload_image(app_id, session_id, statid, bitid, True, os.path.join(img_path, ach['icon_locked']), cookie)
+                upload_image(app_id, session_id, statid, bitid, True, os.path.join(img_path, ach['icon_locked']),
+                             cookie)
 
     print("All achievements processed.")
 
